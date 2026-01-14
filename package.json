@@ -8,11 +8,12 @@
     "gmail-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "auth": "node dist/index.js auth",
-    "prepare": "npm run build",
-    "prepublishOnly": "npm run build"
+    "build": "bun run tsc",
+    "start": "bun run dist/index.js",
+    "auth": "bun run dist/index.js auth",
+    "dev": "bun run src/index.ts",
+    "prepare": "bun run build",
+    "prepublishOnly": "bun run build"
   },
   "files": [
     "dist",
@@ -43,7 +44,8 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=14.0.0",
+    "bun": ">=1.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.4.0",
@@ -60,6 +62,7 @@
   "devDependencies": {
     "@types/node": "^20.10.5",
     "@types/nodemailer": "^6.4.17",
+    "bun-types": "^1.0.0",
     "typescript": "^5.3.3"
   }
 }
