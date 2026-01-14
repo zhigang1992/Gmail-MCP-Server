@@ -23,7 +23,12 @@ import { createFilter, listFilters, getFilter, deleteFilter, filterTemplates, Gm
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configuration paths
-const CONFIG_DIR = path.join(os.homedir(), '.gmail-mcp');
+// GMAIL_ACCOUNT allows running multiple instances with different accounts
+// e.g., GMAIL_ACCOUNT=personal or GMAIL_ACCOUNT=work
+const GMAIL_ACCOUNT = process.env.GMAIL_ACCOUNT;
+const CONFIG_DIR = GMAIL_ACCOUNT
+    ? path.join(os.homedir(), '.gmail-mcp', GMAIL_ACCOUNT)
+    : path.join(os.homedir(), '.gmail-mcp');
 const OAUTH_PATH = process.env.GMAIL_OAUTH_PATH || path.join(CONFIG_DIR, 'gcp-oauth.keys.json');
 const CREDENTIALS_PATH = process.env.GMAIL_CREDENTIALS_PATH || path.join(CONFIG_DIR, 'credentials.json');
 
@@ -95,23 +100,28 @@ function extractEmailContent(messagePart: GmailMessagePart): EmailContent {
 
 async function loadCredentials() {
     try {
+        // Log which account is being used (if any)
+        if (GMAIL_ACCOUNT) {
+            console.error(`Using Gmail account: ${GMAIL_ACCOUNT}`);
+        }
+
         // Create config directory if it doesn't exist
-        if (!process.env.GMAIL_OAUTH_PATH && !CREDENTIALS_PATH &&!fs.existsSync(CONFIG_DIR)) {
+        if (!fs.existsSync(CONFIG_DIR)) {
             fs.mkdirSync(CONFIG_DIR, { recursive: true });
         }
 
         // Check for OAuth keys in current directory first, then in config directory
         const localOAuthPath = path.join(process.cwd(), 'gcp-oauth.keys.json');
-        let oauthPath = OAUTH_PATH;
 
-        if (fs.existsSync(localOAuthPath)) {
-            // If found in current directory, copy to config directory
+        if (fs.existsSync(localOAuthPath) && !fs.existsSync(OAUTH_PATH)) {
+            // If found in current directory and not in config, copy to config directory
             fs.copyFileSync(localOAuthPath, OAUTH_PATH);
-            console.log('OAuth keys found in current directory, copied to global config.');
+            console.error('OAuth keys found in current directory, copied to config.');
         }
 
         if (!fs.existsSync(OAUTH_PATH)) {
-            console.error('Error: OAuth keys file not found. Please place gcp-oauth.keys.json in current directory or', CONFIG_DIR);
+            const accountMsg = GMAIL_ACCOUNT ? ` for account "${GMAIL_ACCOUNT}"` : '';
+            console.error(`Error: OAuth keys file not found${accountMsg}. Please place gcp-oauth.keys.json in current directory or ${CONFIG_DIR}`);
             process.exit(1);
         }
 
@@ -156,7 +166,8 @@ async function authenticate() {
             ],
         });
 
-        console.log('Please visit this URL to authenticate:', authUrl);
+        const accountMsg = GMAIL_ACCOUNT ? ` for account "${GMAIL_ACCOUNT}"` : '';
+        console.log(`Please visit this URL to authenticate${accountMsg}:`, authUrl);
         open(authUrl);
 
         server.on('request', async (req, res) => {
@@ -178,7 +189,10 @@ async function authenticate() {
                 fs.writeFileSync(CREDENTIALS_PATH, JSON.stringify(tokens));
 
                 res.writeHead(200);
-                res.end('Authentication successful! You can close this window.');
+                const successMsg = GMAIL_ACCOUNT
+                    ? `Authentication successful for account "${GMAIL_ACCOUNT}"! You can close this window.`
+                    : 'Authentication successful! You can close this window.';
+                res.end(successMsg);
                 server.close();
                 resolve();
             } catch (error) {

@@ -102,6 +102,59 @@ npx -y @smithery/cli install @gongrzhe/server-gmail-autoauth-mcp --client claude
 }
 ```
 
+### Multi-Account Support
+
+You can run multiple Gmail accounts by using the `GMAIL_ACCOUNT` environment variable. Each account stores its credentials in a separate subdirectory.
+
+1. **Authenticate each account:**
+
+```bash
+# Personal account
+GMAIL_ACCOUNT=personal npx @gongrzhe/server-gmail-autoauth-mcp auth
+
+# Work account
+GMAIL_ACCOUNT=work npx @gongrzhe/server-gmail-autoauth-mcp auth
+```
+
+2. **Configure multiple accounts in Claude Desktop:**
+
+```json
+{
+  "mcpServers": {
+    "gmail-personal": {
+      "command": "npx",
+      "args": ["@gongrzhe/server-gmail-autoauth-mcp"],
+      "env": {
+        "GMAIL_ACCOUNT": "personal"
+      }
+    },
+    "gmail-work": {
+      "command": "npx",
+      "args": ["@gongrzhe/server-gmail-autoauth-mcp"],
+      "env": {
+        "GMAIL_ACCOUNT": "work"
+      }
+    }
+  }
+}
+```
+
+**Directory Structure:**
+```
+~/.gmail-mcp/
+├── personal/
+│   ├── gcp-oauth.keys.json
+│   └── credentials.json
+├── work/
+│   ├── gcp-oauth.keys.json
+│   └── credentials.json
+└── (default - no GMAIL_ACCOUNT)
+    ├── gcp-oauth.keys.json
+    └── credentials.json
+```
+
+> **Note**: You can share the same `gcp-oauth.keys.json` across accounts or use different OAuth credentials per account. The credentials.json (access/refresh tokens) are always account-specific.
+
 ### Docker Support
 
 If you prefer using Docker:
