@@ -26,11 +26,29 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // GMAIL_ACCOUNT allows running multiple instances with different accounts
 // e.g., GMAIL_ACCOUNT=personal or GMAIL_ACCOUNT=work
 const GMAIL_ACCOUNT = process.env.GMAIL_ACCOUNT;
+const BASE_CONFIG_DIR = path.join(os.homedir(), '.gmail-mcp');
 const CONFIG_DIR = GMAIL_ACCOUNT
-    ? path.join(os.homedir(), '.gmail-mcp', GMAIL_ACCOUNT)
-    : path.join(os.homedir(), '.gmail-mcp');
-const OAUTH_PATH = process.env.GMAIL_OAUTH_PATH || path.join(CONFIG_DIR, 'gcp-oauth.keys.json');
+    ? path.join(BASE_CONFIG_DIR, GMAIL_ACCOUNT)
+    : BASE_CONFIG_DIR;
 const CREDENTIALS_PATH = process.env.GMAIL_CREDENTIALS_PATH || path.join(CONFIG_DIR, 'credentials.json');
+
+// OAuth path resolution: check account-specific dir first, then fallback to base dir
+function resolveOAuthPath(): string {
+    if (process.env.GMAIL_OAUTH_PATH) {
+        return process.env.GMAIL_OAUTH_PATH;
+    }
+    const accountOAuthPath = path.join(CONFIG_DIR, 'gcp-oauth.keys.json');
+    if (fs.existsSync(accountOAuthPath)) {
+        return accountOAuthPath;
+    }
+    // Fallback to base config dir for shared OAuth keys
+    const baseOAuthPath = path.join(BASE_CONFIG_DIR, 'gcp-oauth.keys.json');
+    if (fs.existsSync(baseOAuthPath)) {
+        return baseOAuthPath;
+    }
+    // Return account-specific path as default (will show in error message)
+    return accountOAuthPath;
+}
 
 // Type definitions for Gmail API responses
 interface GmailMessagePart {
@@ -110,22 +128,27 @@ async function loadCredentials() {
             fs.mkdirSync(CONFIG_DIR, { recursive: true });
         }
 
-        // Check for OAuth keys in current directory first, then in config directory
-        const localOAuthPath = path.join(process.cwd(), 'gcp-oauth.keys.json');
+        // Resolve OAuth path with fallback to base config dir
+        const oauthPath = resolveOAuthPath();
 
-        if (fs.existsSync(localOAuthPath) && !fs.existsSync(OAUTH_PATH)) {
-            // If found in current directory and not in config, copy to config directory
-            fs.copyFileSync(localOAuthPath, OAUTH_PATH);
+        // Check for OAuth keys in current directory first
+        const localOAuthPath = path.join(process.cwd(), 'gcp-oauth.keys.json');
+        if (fs.existsSync(localOAuthPath) && !fs.existsSync(path.join(CONFIG_DIR, 'gcp-oauth.keys.json'))) {
+            // If found in current directory and not in account config, copy to account config directory
+            fs.copyFileSync(localOAuthPath, path.join(CONFIG_DIR, 'gcp-oauth.keys.json'));
             console.error('OAuth keys found in current directory, copied to config.');
         }
 
-        if (!fs.existsSync(OAUTH_PATH)) {
+        // Re-resolve after potential copy
+        const resolvedOAuthPath = resolveOAuthPath();
+
+        if (!fs.existsSync(resolvedOAuthPath)) {
             const accountMsg = GMAIL_ACCOUNT ? ` for account "${GMAIL_ACCOUNT}"` : '';
-            console.error(`Error: OAuth keys file not found${accountMsg}. Please place gcp-oauth.keys.json in current directory or ${CONFIG_DIR}`);
+            console.error(`Error: OAuth keys file not found${accountMsg}. Please place gcp-oauth.keys.json in ${CONFIG_DIR} or ${BASE_CONFIG_DIR}`);
             process.exit(1);
         }
 
-        const keysContent = JSON.parse(fs.readFileSync(OAUTH_PATH, 'utf8'));
+        const keysContent = JSON.parse(fs.readFileSync(resolvedOAuthPath, 'utf8'));
         const keys = keysContent.installed || keysContent.web;
 
         if (!keys) {
